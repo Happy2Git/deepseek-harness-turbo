@@ -83,7 +83,7 @@ Turbo 保留 Standard 的项目指令、技能和编辑工具，将通用委派�
 
 在会话预设选择器中选择 Turbo。在 **Settings → Agent presets** 中编辑 Turbo 的 `turbo-investigate` 插件配置。随附路由为 `provider: ''`、`model: qwen38`。开始调查前，将 provider 填为已安装的模型提供方标识；endpoint 和凭据通过该提供方的设置配置。路由是提前保存的预设值，与主 agent 当前选择的模型独立。路由留空时返回配置错误，不调用 scout 模型。
 
-Turbo 使用任务笔记和无摘要模型调用的上下文替换。主 agent 先保存 `context_note`，再调用 `new_context`；已有历史工具可从被替换的事件中找回证据。隔离的搜索后端在首次搜索时启用。阈值、保留内容及恢复限制见 [Turbo 上下文窗口](../../session-query/tool-session-query/README.zh.md#turbo-context-windows)。
+Turbo 使用任务笔记和无摘要模型调用的上下文替换。主 agent 先保存 `context_note`，再调用 `new_context`；已有历史工具可从被替换的事件中找回证据。隔离的搜索后端在首次搜索时启用，并使用 trigram 子串匹配检索中文证据。阈值、保留内容及恢复限制见 [Turbo 上下文窗口](../../session-query/tool-session-query/README.zh.md#turbo-context-windows)。
 
 可选的 [`turbo-capacity.patch.yml`](turbo-capacity.patch.yml) 覆盖层将该 Host 所有模式的模型流并发数限制为十。启动 Web profile 时通过命令行 `--patch` 选项加载；选择 Turbo 不会自动启用它。报告限制、预算、取消及该容量限制的进程边界见[调查契约](../../subagent/tool-subagent/README.zh.md#turbo-investigation)。
 

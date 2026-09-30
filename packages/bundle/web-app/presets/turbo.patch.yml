@@ -72,6 +72,7 @@
                 config:
                   path: ':memory:'
                   openAt: first-search
+                  tokenize: trigram
               - id: turbo-context-window
                 name: '@deepseek-ai/dsh-tool-session-query/turbo-context'
                 config:

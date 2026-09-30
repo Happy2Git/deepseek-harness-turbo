@@ -62,6 +62,8 @@ Ranking is deterministic: more actual FTS5 highlighted-match spans first, then s
 
 The `unicode61` tokenizer matches tokens and phrases, not arbitrary substrings: `AI` does not match the token `BRAID`. Use `ctx.sessionQuery.filterEvents()` with a `text` clause when a literal whitespace-flexible substring scan is required.
 
+Set `tokenize: trigram` for CJK substring retrieval. The default remains `unicode61`. Queries of at least three Unicode code points use FTS5; shorter queries use a literal substring scan with ASCII case folding, escaped wildcard characters, and occurrence-count ranking. Short scans can be slower on large logs and synchronous SQLite queries cannot be interrupted mid-statement. The derived index may grow; changing tokenizer rebuilds it from the original logs without changing those logs.
+
 ### When to defer or disable search
 
 With `openAt: first-search`, the service activates without importing `node:sqlite` or opening the index, deferring SQLite's experimental warning until the first actual search; an invalid database fails that first search instead of service activation. With `openAt: never`, full-text search is off for the deployment: `searchSessions` and `searchEvents` fail with `SESSION_QUERY_SEARCH_DISABLED` before any request normalization, while every inherited exact read, filter, and trace keeps working. Requests that exceed the compiled-predicate budget (14 combined predicates across sessions, 13 within a session) or SQLite's portable 32,766-binding limit fail with `SESSION_QUERY_INVALID_FILTER` before statement preparation.

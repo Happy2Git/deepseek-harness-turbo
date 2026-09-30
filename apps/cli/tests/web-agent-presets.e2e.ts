@@ -324,8 +324,8 @@ describe('the shipped Web composition', () => {
 
   it('replaces Turbo context without summarization and retrieves shadowed evidence after resume', async () => {
     const workspace = await mkdtemp(join(tmpdir(), 'dsh-turbo-context-'))
-    const marker = 'ARCHIVE_ONLY_EVIDENCE_763'
-    await writeFile(join(workspace, 'evidence.txt'), `${marker}\n${'source detail\n'.repeat(300)}`)
+    const marker = '历史证据'
+    await writeFile(join(workspace, 'evidence.txt'), `需要保留的${marker}位于连续中文句子中\n${'source detail\n'.repeat(300)}`)
     await writeFile(join(workspace, 'AGENTS.md'), 'Always preserve KEEP_PROJECT_RULE.\n')
     const note = 'Goal: investigate evidence.txt. File inspected; no edits made. Next: verify archived evidence through session history.'
     const adapter = new MockAdapter([

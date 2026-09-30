@@ -2656,7 +2656,7 @@ export interface Config {
 
 - `inject`: `sessions`
 - `refs`: [`SessionQueryConfig`](../packages/session-query/session-query/src/index.ts)
-- `source`: [`packages/session-query/session-query-sqlite/src/index.ts:92`](../packages/session-query/session-query-sqlite/src/index.ts)
+- `source`: [`packages/session-query/session-query-sqlite/src/index.ts:95`](../packages/session-query/session-query-sqlite/src/index.ts)
 
 ```ts config-catalog
 /** Combined session-query configuration backed by SQLite full-text search. */
@@ -2665,7 +2665,7 @@ export interface Config extends SessionQueryConfig {
    * Dedicated derived-index path; `:memory:` is supported for ephemeral
    * indexes. Missing directories and database files are created owner-only on
    * POSIX filesystems; existing modes are preserved.
-   */
+  */
   path: string
   /**
    * Open the SQLite module and handle at service activation or the first
@@ -2673,7 +2673,7 @@ export interface Config extends SessionQueryConfig {
    * reads, filters, and traces stay available, while `searchSessions` and
    * `searchEvents` fail with `SESSION_QUERY_SEARCH_DISABLED` and SQLite is
    * never imported or opened. Defaults to `startup`.
-   */
+  */
   openAt?: OpenAt
   /** SQLite journal mode. Defaults to `wal`. */
   journalMode?: JournalMode
@@ -2687,6 +2687,16 @@ export interface Config extends SessionQueryConfig {
   persistedReadConcurrency?: number
   /** Maximum cold prepared-Session observations the inherited reader retains for reuse. Defaults to 5. */
   preparedSessionCacheSize?: number
+  /**
+   * FTS5 tokenizer for the derived tables. `unicode61` (the default) matches
+   * whole whitespace/punctuation-delimited tokens; a CJK sentence without
+   * spaces indexes as one long token, so short Chinese terms inside it do not
+   * match. `trigram` supports substring matching with a larger derived index;
+   * queries under three code points fall back to a full scan with substring
+   * semantics and literal occurrence ranking. Switching the value rebuilds the
+   * derived index from the logs on the next open.
+  */
+  tokenize?: FtsTokenizer
 }
 
 /** SQLite module/handle opening phase; `never` disables full-text search entirely. */
@@ -2694,6 +2704,9 @@ export type OpenAt = 'startup' | 'first-search' | 'never'
 
 /** Supported SQLite journal modes. */
 export type JournalMode = 'wal' | 'delete' | 'truncate' | 'persist'
+
+/** FTS5 tokenizer backing the derived full-text tables. */
+export type FtsTokenizer = 'unicode61' | 'trigram'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-session-query-sqlite -->
 

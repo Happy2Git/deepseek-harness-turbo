@@ -1877,4 +1877,93 @@ describe('SQLite schema, cancellation, and real persistence integration', () => 
     await searchB.dispose()
     await persistenceB.dispose()
   })
+
+  it('matches CJK substrings under trigram, with a LIKE scan for short queries', async () => {
+    const ctx = await liveContext({ path: ':memory:', tokenize: 'trigram' })
+    const service = ctx.sessionQuery as SqliteSessionQueryEngine
+    ctx.sessions.create(SessionId('tri'), {
+      seed: messageEvents('今天讨论会话搜索功能的性能', 10),
+      meta: { createdAt: 10 },
+    })
+
+    // At or above three code points: trigram MATCH finds the substring that
+    // unicode61 folds into one long token.
+    await expect(service.searchSessions({ query: '会话搜索功能' }))
+      .resolves.toMatchObject({ items: [{ header: { id: 'tri' } }] })
+    // Below three code points: the LIKE scan keeps substring semantics, and
+    // the hand-built snippet still carries highlight markers.
+    await expect(service.searchSessions({ query: '搜索功能' }))
+      .resolves.toMatchObject({ items: [{ header: { id: 'tri' } }] })
+    const short = await service.searchSessions({ query: '搜索' })
+    expect(short.items).toHaveLength(1)
+    expect(short.items[0]?.bestMatch.snippet).toContain('搜索')
+
+    // The default tokenizer keeps its whole-token semantics for comparison.
+    const plain = await liveContext({ path: ':memory:' })
+    plain.sessions.create(SessionId('plain'), {
+      seed: messageEvents('今天讨论会话搜索功能的性能', 10),
+      meta: { createdAt: 10 },
+    })
+    await expect((plain.sessionQuery as SqliteSessionQueryEngine).searchSessions({ query: '会话搜索' }))
+      .resolves.toEqual({ items: [] })
+    await ctx.fiber.dispose()
+    await plain.fiber.dispose()
+  })
+
+  it('keeps short-query wildcards literal and counts ASCII case-insensitive matches', async () => {
+    const ctx = await liveContext({ path: ':memory:', tokenize: 'trigram' })
+    ctx.sessions.create(SessionId('literal'), { seed: messageEvents('prefix AI plus 50% and x_y and 😀尾 suffix', 10) })
+    ctx.sessions.create(SessionId('other'), { seed: messageEvents('unrelated document', 10) })
+    for (const query of ['ai', '%', '_', '😀尾']) {
+      const result = await ctx.sessionQuery.searchEvents({ sessionId: SessionId('literal'), query })
+      expect(result.items).toHaveLength(1)
+      expect(result.items[0]?.snippet).toContain(query === 'ai' ? 'AI' : query)
+      const sessions = await ctx.sessionQuery.searchSessions({ query })
+      expect(sessions.items.map(item => item.header.id)).toEqual(['literal'])
+    }
+    await ctx.fiber.dispose()
+  })
+
+  it('rebuilds persisted Chinese evidence from logs after switching tokenizers', async () => {
+    const path = await temporaryPath('trigram-rebuild.db')
+    const meta = header('chinese-persisted')
+    const events = messageEvents('连续中文历史证据仍然保留 baseline')
+    TestPersistence.reset([{ meta, events }])
+    const before = await liveContext({ path })
+    await before.plugin(TestPersistence)
+    expect((await before.sessionQuery.searchSessions({ query: 'baseline' })).items).toHaveLength(1)
+    expect((await before.sessionQuery.searchSessions({ query: '历史证据' })).items).toHaveLength(0)
+    await before.fiber.dispose()
+    const after = await liveContext({ path, tokenize: 'trigram' })
+    await after.plugin(TestPersistence)
+    try {
+      for (const query of ['历史证据', '证据']) {
+        expect((await after.sessionQuery.searchSessions({ query })).items).toHaveLength(1)
+        expect((await after.sessionQuery.searchEvents({ sessionId: meta.id, query })).items).toHaveLength(1)
+      }
+      expect(TestPersistence.entries.get(meta.id)?.events).toEqual(events)
+    } finally { await after.fiber.dispose() }
+  })
+
+  it('validates tokenize config and rebuilds derived tables on a tokenizer switch', async () => {
+    expect(() => new SqliteSessionQueryEngine.Config({ path: ':memory:', tokenize: 'bogus' as never })).toThrow()
+    expect(new SqliteSessionQueryEngine.Config({ path: ':memory:' }).tokenize).toBe('unicode61')
+
+    const path = await temporaryPath('retokenized.db')
+    const trigramCtx = await liveContext({ path, tokenize: 'trigram' })
+    const readDdl = (): string => {
+      const db = new DatabaseSync(path)
+      try {
+        const row = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'persisted_docs'").get() as { sql: string }
+        return row.sql
+      } finally { db.close() }
+    }
+    expect(readDdl()).toContain("tokenize = 'trigram'")
+
+    // Reopening with the other tokenizer rebuilds in place.
+    await trigramCtx.fiber.dispose()
+    const unicodeCtx = await liveContext({ path })
+    expect(readDdl()).toContain("tokenize = 'unicode61'")
+    await unicodeCtx.fiber.dispose()
+  })
 })

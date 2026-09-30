@@ -62,6 +62,8 @@ kind: "package-reference"
 
 `unicode61` tokenizer 匹配 token 与短语，而非任意子字符串：`AI` 不匹配 token `BRAID`。需要执行字面、空白灵活的字符串子串扫描时，使用带 `text` 子句的 `ctx.sessionQuery.filterEvents()`。
 
+设置 `tokenize: trigram` 可检索连续中文中的子串，默认值仍为 `unicode61`。至少三个 Unicode 码点的查询使用 FTS5；更短的查询使用字面子串扫描，忽略 ASCII 大小写、转义通配符，并按出现次数排序。短词扫描在大型日志中可能较慢，同步 SQLite 语句执行期间无法中断。派生索引可能增大；切换分词器时从原始日志重建索引，不修改原始日志。
+
 ### 何时推迟或关闭搜索
 
 使用 `openAt: first-search` 时，服务在不导入 `node:sqlite`、不打开索引的情况下激活，把 SQLite 的实验性警告推迟到首次实际搜索；无效数据库让首次搜索失败，而不是服务激活失败。使用 `openAt: never` 时，全文搜索对该部署关闭：`searchSessions` 与 `searchEvents` 在任何请求规范化之前就以 `SESSION_QUERY_SEARCH_DISABLED` 失败，而继承的全部精确读取、过滤与追踪保持可用。请求超过编译谓词预算（跨会话 14 个组合谓词、会话内 13 个）或 SQLite 可移植的 32,766 绑定上限时，会在准备语句前以 `SESSION_QUERY_INVALID_FILTER` 失败。
