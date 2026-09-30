@@ -1,0 +1,8 @@
+# Opt in once per Host. Shared across all modes and routes in this process.
+# Endpoint credentials and addresses stay in the normal model-provider settings.
+- insert:
+    - id: turbo-model-capacity
+      name: '@deepseek-ai/dsh-tool-subagent/turbo-capacity'
+      config:
+        maxConcurrent: 10
+        maxQueued: 100

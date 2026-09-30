@@ -1,0 +1,7 @@
+- insert:
+    - id: turbo-investigate
+      name: '@deepseek-ai/dsh-tool-subagent/turbo'
+      config:
+        routes:
+          - provider: ''
+            model: qwen38

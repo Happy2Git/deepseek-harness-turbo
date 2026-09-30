@@ -25,7 +25,8 @@
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./presets/*.patch.yml": "./presets/*.patch.yml",
     "./src/*": "./src/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./turbo-capacity.patch.yml": "./turbo-capacity.patch.yml"
   },
   "files": [
     "lib/index.js",
@@ -35,7 +36,9 @@
     "presets/ptc.patch.yml",
     "presets/minimal.patch.yml",
     "presets/cordis.patch.yml",
-    "lib/types/**/*.d.ts"
+    "lib/types/**/*.d.ts",
+    "presets/turbo.patch.yml",
+    "turbo-capacity.patch.yml"
   ],
   "license": "MIT",
   "dsh": {
@@ -45,7 +48,8 @@
         "./presets/standard.patch.yml",
         "./presets/ptc.patch.yml",
         "./presets/minimal.patch.yml",
-        "./presets/cordis.patch.yml"
+        "./presets/cordis.patch.yml",
+        "./presets/turbo.patch.yml"
       ]
     }
   },
@@ -176,7 +180,8 @@
     "@deepseek-ai/dsh-client-ui-shortcuts": "workspace:*",
     "@deepseek-ai/dsh-client-product-analytics": "workspace:*",
     "@deepseek-ai/dsh-host-product-telemetry-otel": "workspace:*",
-    "@deepseek-ai/dsh-client-ui-settings-session-log": "workspace:*"
+    "@deepseek-ai/dsh-client-ui-settings-session-log": "workspace:*",
+    "@deepseek-ai/dsh-tool-session-query": "workspace:*"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",

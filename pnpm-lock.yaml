@@ -184,6 +184,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@deepseek-ai/dsh-tool-session-query':
+        specifier: workspace:*
+        version: link:../../packages/session-query/tool-session-query
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../vendor/cordis
@@ -2350,6 +2353,9 @@ importers:
 
   packages/bundle/web-app:
     dependencies:
+      '@deepseek-ai/dsh-tool-session-query':
+        specifier: workspace:*
+        version: link:../../session-query/tool-session-query
       '@deepseek-ai/dsh-agent-instructions':
         specifier: workspace:*
         version: link:../../context/agent-instructions
@@ -10663,6 +10669,9 @@ importers:
 
   packages/session-query/tool-session-query:
     dependencies:
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../util/brand
@@ -10670,6 +10679,12 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
     devDependencies:
+      '@deepseek-ai/dsh-compaction':
+        specifier: workspace:*
+        version: link:../../compaction/compaction
+      '@deepseek-ai/dsh-token-meter':
+        specifier: workspace:*
+        version: link:../../llm/token-meter
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
@@ -14016,6 +14031,9 @@ importers:
 
   python/sdk-runtime:
     dependencies:
+      '@deepseek-ai/dsh-tool-session-query':
+        specifier: workspace:*
+        version: link:../../packages/session-query/tool-session-query
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../vendor/cordis

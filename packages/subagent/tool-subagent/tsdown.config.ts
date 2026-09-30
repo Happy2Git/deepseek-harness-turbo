@@ -16,4 +16,6 @@ export default defineConfig([
   entry('lib/types/index.js'),
   entry('lib/types/model-selection-settings.js'),
   entry('lib/types/invariant.js'),
+  entry('lib/types/turbo.js'),
+  entry('lib/types/turbo-capacity.js'),
 ])

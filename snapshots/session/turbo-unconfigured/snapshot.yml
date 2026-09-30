@@ -1,0 +1,9 @@
+version: 1
+scenario: turbo-unconfigured
+profile: headless
+composition: turbo-unconfigured
+recording: authored
+header:
+  class: turbo-unconfigured
+  pin: true
+permission: read-only

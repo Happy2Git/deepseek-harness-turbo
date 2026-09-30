@@ -69,6 +69,24 @@ dsh --profile web --no-open --port 8080
 
 每个浏览器会话选择一个随发行版交付的 preset（默认 `standard`）。Agent 预设设置页可更改默认项并编辑预设的子插件；保存结果持久化到 `$DSH_HOME/profiles/web/cordis.patch.yml`。只有 Host 提供可编辑的 profile 时，Creator 的插件管理工具才会启用。
 
+### 预设对比与 Turbo 配置
+
+| 预设 | 执行与委派方式 | 适用任务 |
+|---|---|---|
+| Standard | 原生工具、通用子 agent 和 workflow | 使用完整默认工具集的通用编码 |
+| Minimal | 简短的完整 persona 与持久 shell | 小任务或刻意精简的 harness |
+| PTC | 通过 `run_code` 编程调用工具；禁用 workflow | 用代码批量调用工具并处理结果 |
+| Cordis | 提供 harness 与插件扩展能力 | 修改 harness 及其装配配置 |
+| Turbo | 原生工具、固定的只读调查 scout，由主 agent 写入 | 可拆分的独立调查及精简证据报告 |
+
+Turbo 保留 Standard 的项目指令、技能和编辑工具，将通用委派替换为 `turbo_investigate`，不采用 Minimal 的完整 persona 开关。原有四个预设声明保持不变。只有能拆分为独立范围的任务才适合并行调查；尚未通过真实 endpoint 测量延迟或 token 收益。
+
+在会话预设选择器中选择 Turbo。在 **Settings → Agent presets** 中编辑 Turbo 的 `turbo-investigate` 插件配置。随附路由为 `provider: ''`、`model: qwen38`。开始调查前，将 provider 填为已安装的模型提供方标识；endpoint 和凭据通过该提供方的设置配置。路由是提前保存的预设值，与主 agent 当前选择的模型独立。路由留空时返回配置错误，不调用 scout 模型。
+
+Turbo 使用任务笔记和无摘要模型调用的上下文替换。主 agent 先保存 `context_note`，再调用 `new_context`；已有历史工具可从被替换的事件中找回证据。隔离的搜索后端在首次搜索时启用。阈值、保留内容及恢复限制见 [Turbo 上下文窗口](../../session-query/tool-session-query/README.zh.md#turbo-context-windows)。
+
+可选的 [`turbo-capacity.patch.yml`](turbo-capacity.patch.yml) 覆盖层将该 Host 所有模式的模型流并发数限制为十。启动 Web profile 时通过命令行 `--patch` 选项加载；选择 Turbo 不会自动启用它。报告限制、预算、取消及该容量限制的进程边界见[调查契约](../../subagent/tool-subagent/README.zh.md#turbo-investigation)。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -77,7 +95,7 @@ dsh --profile web --no-open --port 8080
 <details>
 <summary>实现细节——点击展开</summary>
 
-此 bundle 由一层五个文件的补丁和一个运行时胶水插件组成：`cordis.patch.yml` 承载宿主行和 preset 注册表，每个 `presets/<id>.patch.yml` 插入一条随发行版交付的 preset 声明，按 `dsh.bundle.patch` 列出的顺序应用。存储栈与投影缓存来自 `dsh-base`；Web 叠加层的工作区和消息反馈条目消费共享的 `storageDomain` 服务。补丁重述 base 有意省略的界面专用值，插入 Web 专用宿主条目和浏览器插件列表，再将 Agent 层移到预设后面。胶水插件负责 dist 服务、信任采样、提示词段落、bash 变量和就绪通知。`office-to-pdf` 条目为宿主消费者挂载一个延迟创建引擎的 [Office 转换提供方](../../document/office-to-pdf/README.zh.md)，使用此 bundle 的 Desktop 组合也共享该提供方。 转换服务的 Remote 方法负责预览读取授权，Document Preview 负责 Office 查看器和客户端缓存。
+此 bundle 由一层六个文件的补丁和一个运行时胶水插件组成：`cordis.patch.yml` 承载宿主行和 preset 注册表，每个 `presets/<id>.patch.yml` 插入一条随发行版交付的 preset 声明，按 `dsh.bundle.patch` 列出的顺序应用。存储栈与投影缓存来自 `dsh-base`；Web 叠加层的工作区和消息反馈条目消费共享的 `storageDomain` 服务。补丁重述 base 有意省略的界面专用值，插入 Web 专用宿主条目和浏览器插件列表，再将 Agent 层移到预设后面。胶水插件负责 dist 服务、信任采样、提示词段落、bash 变量和就绪通知。`office-to-pdf` 条目为宿主消费者挂载一个延迟创建引擎的 [Office 转换提供方](../../document/office-to-pdf/README.zh.md)，使用此 bundle 的 Desktop 组合也共享该提供方。 转换服务的 Remote 方法负责预览读取授权，Document Preview 负责 Office 查看器和客户端缓存。
 
 ### patch 语义
 

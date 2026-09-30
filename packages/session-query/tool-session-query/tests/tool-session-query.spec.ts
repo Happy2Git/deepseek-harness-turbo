@@ -32,6 +32,9 @@ import SessionQueryEngine, {
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { type ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import * as ToolSessionQuery from '@deepseek-ai/dsh-tool-session-query'
+import * as TurboContext from '../src/turbo-context.ts'
+import LlmRuntime from '@deepseek-ai/dsh-llm'
+import TokenMeter from '@deepseek-ai/dsh-token-meter'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -252,6 +255,20 @@ function errorCode(result: ToolExecutionResult): string | undefined {
 }
 
 describe('registration and schemas', () => {
+  it('removes Turbo note tools and projection when its plugin unloads', async () => {
+    const { ctx, caller } = await mount()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(TokenMeter)
+    const fiber = await ctx.plugin(TurboContext, { maxNoteBytes: 4096, remindRatio: 0.65, resetRatio: 0.8 })
+    expect(ctx.tools.get('context_note')).toBeDefined()
+    expect(ctx.tools.get('new_context')).toBeDefined()
+    expect(ctx.sessionProjections.stateOf(caller, 'turboContext')).toBeDefined()
+    await fiber.dispose()
+    expect(ctx.tools.get('context_note')).toBeUndefined()
+    expect(ctx.tools.get('new_context')).toBeUndefined()
+    expect(ctx.sessionProjections.stateOf(caller, 'turboContext')).toBeUndefined()
+  })
+
   it('registers the five cursor-free tools, prompt, timeouts, and pure generic presenters, then disposes them', async () => {
     const mounted = await mount({ maxSearchResults: 7, searchTimeoutMs: 1234 })
     const names = mounted.ctx.tools.schemas().map(schema => schema.name)

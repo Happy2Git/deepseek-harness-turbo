@@ -69,6 +69,24 @@ When you launch `dsh --profile web` over SSH, the URL line still prints but the 
 
 Each browser session selects a shipped preset (`standard` by default). The Agent presets settings page changes the default and edits preset child plugins; saves persist in `$DSH_HOME/profiles/web/cordis.patch.yml`. Creator's plugin-management tool is enabled only when the Host provides an editable profile.
 
+### Preset comparison and Turbo setup
+
+| Preset | Execution and delegation | Best fit |
+|---|---|---|
+| Standard | Native tools, general subagents and workflow | General coding with the full default tool set |
+| Minimal | Short complete persona and persistent shell | Small tasks or a deliberately small harness |
+| PTC | Programmatic tool calls through `run_code`; workflow disabled | Batching and transforming tool results in code |
+| Cordis | Harness and plugin extension capabilities | Editing the harness and its composition |
+| Turbo | Native tools, fixed read-only investigation scouts, main-agent writes | Independent investigation areas with concise evidence reports |
+
+Turbo retains Standard's project instructions, skills, and editing tools. It replaces general delegation with `turbo_investigate`; it does not use Minimal's complete-persona switch. The original four preset declarations remain unchanged. Parallel investigation is useful only when the work divides into independent areas; no latency or token savings have been measured against a real endpoint.
+
+Choose Turbo in the session preset selector. In **Settings → Agent presets**, edit Turbo's `turbo-investigate` plugin configuration. Its shipped route is `provider: ''`, `model: qwen38`. Set the provider to an installed model-provider ID before investigating; configure its endpoint and credentials through that provider's settings. Routes are saved preset values, independent of the main agent's selected model. Blank routes return a configuration error without calling a scout model.
+
+Turbo uses maintained task notes and model-free context replacement instead of summarization. The main agent saves `context_note` before calling `new_context`; existing history tools recover evidence from shadowed events. Its isolated search backend opens on first search. See [Turbo context windows](../../session-query/tool-session-query/README.md#turbo-context-windows) for thresholds, preservation, and recovery limits.
+
+The optional [`turbo-capacity.patch.yml`](turbo-capacity.patch.yml) overlay admits at most ten model streams across the Host and all its modes. Add it through the CLI `--patch` option when launching the Web profile; it is not automatically enabled by choosing Turbo. See the [investigation contract](../../subagent/tool-subagent/README.md#turbo-investigation) for report limits, budgets, cancellation, and the process boundary of this capacity limit.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -77,7 +95,7 @@ Each browser session selects a shipped preset (`standard` by default). The Agent
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The bundle is one patch layer of five files plus one runtime glue plugin: `cordis.patch.yml` carries the host rows and the preset registry, and each `presets/<id>.patch.yml` inserts one shipped preset declaration, applied in the order `dsh.bundle.patch` lists them. The storage stack and projection cache come from `dsh-base`; the web overlay's workspace and message-feedback rows consume that shared `storageDomain` service. The patch restates the surface-specific values the base deliberately omits, inserts the web-only host rows and browser roster, then moves the agent plane behind presets. The glue plugin owns dist serving, trust sampling, prompt sections, the bash variable, and the readiness announcements. The `office-to-pdf` row mounts one lazy [Office conversion provider](../../document/office-to-pdf/README.md) for Host consumers, including Desktop compositions using this bundle. The conversion service's Remote methods authorize preview reads, while Document Preview owns the Office viewer and Client cache.
+The bundle is one patch layer of six files plus one runtime glue plugin: `cordis.patch.yml` carries the host rows and the preset registry, and each `presets/<id>.patch.yml` inserts one shipped preset declaration, applied in the order `dsh.bundle.patch` lists them. The storage stack and projection cache come from `dsh-base`; the web overlay's workspace and message-feedback rows consume that shared `storageDomain` service. The patch restates the surface-specific values the base deliberately omits, inserts the web-only host rows and browser roster, then moves the agent plane behind presets. The glue plugin owns dist serving, trust sampling, prompt sections, the bash variable, and the readiness announcements. The `office-to-pdf` row mounts one lazy [Office conversion provider](../../document/office-to-pdf/README.md) for Host consumers, including Desktop compositions using this bundle. The conversion service's Remote methods authorize preview reads, while Document Preview owns the Office viewer and Client cache.
 
 ### Patch semantics
 
@@ -98,7 +116,7 @@ The URL line and browser handoff are readiness signals: supervisors RPC as soon 
 | [`src/index.ts`](src/index.ts) | The `web-app` glue plugin: dist resolution, LAN trust sampling, prompt sections, bash variable, URL line, browser handoff |
 | [`src/startup.ts`](src/startup.ts) | The `web-startup` provider: `--host`, `--port`, `--trusted-host`, `--no-open`, `--help` |
 | [`cordis.patch.yml`](cordis.patch.yml) | The web patch: restated base values, web host rows, browser roster, preset registry |
-| [`presets/`](presets) | One `@deepseek-ai/dsh-agent-preset` declaration per shipped preset (`standard`, `ptc`, `minimal`, `cordis`), each its own patch file |
+| [`presets/`](presets) | One `@deepseek-ai/dsh-agent-preset` declaration per shipped preset (`standard`, `ptc`, `minimal`, `cordis`, `turbo`), each its own patch file |
 | — | No runtime invariant companion is published; every contribution (frontend-static child plugin, prompt section, bashEnv registration) is registry-disposed with the fiber, and each owning registry's package carries that relation's invariant; the package holds no mutable state of its own to audit. |
 | [`tests/web-app.spec.ts`](tests/web-app.spec.ts) | Dist resolution, fallback seat, prompt sections, readiness |
 | [`tests/startup.spec.ts`](tests/startup.spec.ts) | Command-line parsing over a real Loader tree |

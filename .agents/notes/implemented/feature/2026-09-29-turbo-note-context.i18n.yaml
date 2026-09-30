@@ -1,0 +1,19 @@
+# Bilingual-pair consistency record for 2026-09-29-turbo-note-context.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-29-turbo-note-context.md
+/agent-note-turbo-task-notes-and-model-free-context-replacement:
+  en: 7c2ad192f3aa051d
+  zh: 8917de83f4582bfc
+/agent-note-turbo-task-notes-and-model-free-context-replacement/problem:
+  en: 6bcef7fb3600b461
+  zh: e0f34d17fafa1da1
+/agent-note-turbo-task-notes-and-model-free-context-replacement/decision:
+  en: 4cfa592f392ab6e9
+  zh: bed81cd95df98888
+/agent-note-turbo-task-notes-and-model-free-context-replacement/alternatives-considered:
+  en: 0ce98b2ea7f9e94e
+  zh: 55e411ff5ae252e4
+/agent-note-turbo-task-notes-and-model-free-context-replacement/consequences:
+  en: bdd508af9aa7e265
+  zh: 42347e797f539574

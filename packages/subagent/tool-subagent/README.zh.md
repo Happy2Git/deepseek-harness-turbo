@@ -68,6 +68,17 @@ kind: "package-reference"
 
 一次调用需同时提供 `provider` 与 `model`；当配置值、父 agent 值或提供方持有的默认值能提供路由时，也可只提供推理等级。静态的 `provider.agentRouteDefaults` 在存在时构成提供方／模型基线；工具配置与模型字段会在路由相关强度合并和确切路由预检前覆盖它。没有这些默认值的提供方会使用父 agent 最新已记录请求中的兼容值，再使用父级首次请求前的创建选项，并保留配置的 `maxTokens`。更改路由但未显式提供推理等级时，会清除继承的路由自有等级，使所选模型解析自己的默认值。实时 LLM 适配器在创建子 agent 前校验有效路由。目录成员资格只提供建议，因此适配器接受时，模型可以使用未列出的 id。
 
+<a id="turbo-investigation"></a>
+### Turbo 调查
+
+`@deepseek-ai/dsh-tool-subagent/turbo` 入口通过现有 `spawn` 提供方提供 `turbo_investigate`。使用前在 `routes` 中明确指定 provider/model 标识；路由为空或字段留空时拒绝调用，不继承主 agent 的模型。配置多条路由时，按调查范围的顺序循环分配。endpoint 地址和凭据由模型提供方管理。
+
+默认同时运行两个 scout，每次最多四个调查范围，整次调查限时 180 秒，每个 scout 最多十二个模型步骤。scout 只能执行 `read`、`glob`、`grep` 和自身的 `structured_output`；执行层守卫会拒绝强制调用其他工具。主 agent 负责写入。调用等待子 agent 释放资源后返回，每个调查范围均保留状态，包括失败、无效报告、超时、取消和步数耗尽。当调用方取消整个工具调用时，共享工具执行器在清理后返回标准的中止错误，而非各范围的报告。
+
+报告包含 `findings`，每条具有 `file`、`line`、`problem`、`evidence` 和 `check`，并包含非空的 `coverage`。允许没有发现。每份完整报告最多接受三条发现、4096 个 UTF-8 字节。384-token 报告目标是软性提示。`maxTokens` 是可选的单次请求生成上限；省略时遵循已有的子 agent 选项继承规则，不代表累计调查预算。`reasoningEffort` 可选，必须由配置的提供方支持。
+
+独立入口 `@deepseek-ai/dsh-tool-subagent/turbo-capacity` 提供可选的 Host 级先进先出队列。默认最多同时执行十个模型流，允许一百个请求等待，超额请求报错。限制覆盖该 Host 内所有路由和模式，包括主 agent；不协调其他进程，也不按 endpoint 划分配额。取消等待会移出队列，模型流结束会释放名额，插件卸载会取消等待中的请求。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -200,6 +211,21 @@ Start independent subagent delegations together in one assistant message and con
 #### KV Cache 影响
 
 仅追加；新增可见内容位于可复用请求前缀之后，不会使现有 KV Cache 条目失效。
+
+
+### Turbo 报告
+
+#### 模型看到什么
+
+主 agent 收到紧凑的 JSON，包含每个调查范围的状态和有效报告。scout 收到完整任务及分配范围，并被要求省略进度叙述、通过 `structured_output` 提交一次；提交成功后结束回合，不再生成第二份总结。
+
+#### Token 影响
+
+报告字节数和发现数量由执行层限制；token 目标及精简叙述依赖提示词。调查仍消耗子 agent 的推理、工具调用和读取结果。没有累计 token 硬上限、自动重试或语义去重。主 agent 最多额外修复一次的策略是提示词指引，不是执行层强制限制。
+
+#### KV Cache 影响
+
+scout 在预设路由上启动新对话，不复用父级对话前缀；提供方缓存复用和延迟收益需要在实际部署环境中测量。
 
 ## 已知限制与延期工作
 

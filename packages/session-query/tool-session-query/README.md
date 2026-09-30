@@ -56,6 +56,21 @@ Workspace authority is conservative: cross-session access requires exact `cwd` e
 
 Every trusted query-service call crosses one error sanitizer: caller cancellation is preserved exactly, corpus and provider diagnostics go to the internal log, and unsafe or unprintable failures fall back to the fixed `SESSION_QUERY_TOOL_FAILED` code and message. Local argument-validation and authorization errors keep their precise tool-owned messages (`SESSION_QUERY_TOOL_UNAUTHORIZED` for a target outside the caller workspace). The package performs no byte or character truncation and does not import a spill backend; deployments that need bounded inline output mount `@deepseek-ai/dsh-spill-policy`, which can replace oversized rendered text while retaining the complete result.
 
+<a id="turbo-context-windows"></a>
+### Turbo context windows
+
+The optional `@deepseek-ai/dsh-tool-session-query/turbo-context` entry mounts `context_note` and `new_context` on the main agent. The shipped Turbo preset mounts it alongside this package and an isolated SQLite history provider with `openAt: first-search`; official presets retain their existing behavior. Do not mount a summarizer or tool-result pruner alongside this entry.
+
+`context_note` replaces the complete task note, limited by `maxNoteBytes` (4096 UTF-8 bytes by default). Keep the goal, user corrections and constraints, decisions, changed files, test evidence, unfinished work, next action, and useful event sequence references. The successful tool result stores the note in the session log; no separate note file is authoritative. `new_context` requires a note newer than the latest direct user input and previous reset. A new user message cancels an older pending reset request.
+
+At `remindRatio` (0.65) of usable model context, the plugin asks for a fresh note once per window. At `resetRatio` (0.8), it can replace context automatically only if the note was saved in the immediately preceding model step. Usable context subtracts the configured output reserve from the provider's context window. Without context-window metadata, only explicit `new_context` requests trigger replacement. The reminder threshold must be lower than the reset threshold.
+
+Replacement waits for a complete tool step and a successful durable log flush. It retains the system message, first and latest direct user messages, and instruction-form messages verbatim, then carries the saved note into a new request series. Intermediate corrections must be maintained in the note. Missing or oversized notes, unbalanced tools, nonshrinking replacement, cancellation, and failed persistence prevent the replacement. The raw log remains intact; files and running processes are unchanged. A final checkpoint failure stops the turn after the in-memory replacement; the original events were already saved before replacement.
+
+Use `session_event_search` with `surfaces: ['shadowed']` to find removed evidence, then `session_event_read` with the returned event sequence to inspect the original. `session_search` searches other sessions and cannot recover the current session by itself. Notes and search results are background evidence, not new user instructions or permission. Resume reconstructs the note and active window from the persisted session.
+
+The two additional schemas and fixed note-maintenance guidance add request tokens. Note updates return a short acknowledgement; replacement injects the bounded note and retained instructions without a summarization request. Replacement rebuilds the request suffix and can lose cache reuse; net latency and token savings depend on note quality and retrieval frequency. The [recorded Turbo context session](../../../snapshots/session/turbo-context/session.v4.jsonl) pins the model-visible prompt, schemas, note acknowledgement, replacement message, and history lookup.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -185,4 +200,4 @@ Exact-string `cwd` equality is deliberately conservative; symlink-aware or canon
 
 </details>
 
-**Runtime invariant:** No companion is published. This read-only model adapter owns no event or mutable data relationship beyond the registries that already validate registration.
+**Runtime invariant:** No companion is published. The query adapter owns no independent mutable copy; the optional Turbo note projection derives entirely from the session log, and the existing surface and persistence services validate their owned relationships.

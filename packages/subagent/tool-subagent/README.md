@@ -68,6 +68,17 @@ Set `modelSelectionSettings: true` to sample the Host's `subagent-model-selectio
 
 A call supplies `provider` and `model` together, or supplies only an effort when configured, parent, or provider-owned defaults provide the route. Static `provider.agentRouteDefaults`, when present, form the provider/model baseline; tool configuration and model fields overlay it before route-aware effort merging and exact-route preflight. Providers without these defaults use compatible values from the parent's latest logged request, then the parent's creation options before its first request, while retaining the configured `maxTokens`. Changing the route without an explicit effort clears the inherited route-owned effort, so the selected model resolves its default. The live LLM adapter validates the effective route before child creation. Catalog membership remains advisory, so a model can use an unlisted id when its adapter accepts it.
 
+<a id="turbo-investigation"></a>
+### Turbo investigation
+
+The `@deepseek-ai/dsh-tool-subagent/turbo` entry exposes `turbo_investigate` over the existing `spawn` provider. Configure `routes` with explicit provider/model IDs before use; blank or absent routes reject the call without inheriting the main agent's model. Multiple routes are assigned to scopes in order, cycling through the list. Endpoint addresses and credentials belong to the model provider.
+
+Defaults are two concurrent scouts, four scopes per call, a 180-second investigation deadline, and twelve model steps per scout. Each scout can execute only `read`, `glob`, `grep`, and its local `structured_output`; executor guards reject forced calls to other tools. The main agent remains the writer. Calls wait for child disposal and return a status for every scope, including failure, invalid report, timeout, cancellation, and exhausted steps. When the caller cancels the entire tool call, the shared tool executor returns its standard aborted error after cleanup instead of the scope reports.
+
+Reports contain `findings` with `file`, `line`, `problem`, `evidence`, and `check`, plus nonempty `coverage`. Empty findings are valid. At most three findings and 4096 UTF-8 bytes per complete report are accepted. The 384-token report target is a soft instruction. `maxTokens` is an optional per-request ceiling; if omitted, the existing child option inheritance applies. It is not a cumulative investigation budget. `reasoningEffort` is optional and must be supported by the configured provider.
+
+The separate `@deepseek-ai/dsh-tool-subagent/turbo-capacity` entry is an opt-in Host-wide FIFO queue. Its defaults admit ten model streams and one hundred waiting requests; excess requests fail. It covers all routes and modes within that Host, including the main agent. It does not coordinate other processes or partition slots by endpoint. Cancelled waiters leave the queue, stream completion releases a slot, and plugin unload cancels waiting requests.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -200,6 +211,21 @@ The acknowledgement is retained; a one-shot final output enters parent history o
 #### KV Cache effect
 
 Append-only; newly visible content follows the reusable request prefix and does not invalidate existing KV-cache entries.
+
+
+### Turbo reports
+
+#### What the model sees
+
+The main agent receives compact JSON with every scope's status and valid report. Scouts receive the full task and assigned scope with instructions to omit progress narration and submit once through `structured_output`; a successful submission ends the turn without a second summary.
+
+#### Token effect
+
+Report bytes and finding counts are enforced; token targets and concise narration are instructions. Investigation still consumes child reasoning, tool calls, and read results. There is no cumulative token ceiling, automatic retry, or semantic deduplication. The main agent's one-additional-repair policy is prompt guidance, not executor enforcement.
+
+#### KV Cache effect
+
+Scouts start fresh conversations on their preset routes. They do not reuse the parent's conversation prefix; provider-side cache reuse and latency improvements require measurement on the actual deployment.
 
 ## Known Limitations and Deferred Work
 

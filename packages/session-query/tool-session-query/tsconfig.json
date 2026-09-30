@@ -40,6 +40,12 @@
     },
     {
       "path": "../../core/agent"
+    },
+    {
+      "path": "../../compaction/compaction"
+    },
+    {
+      "path": "../../llm/token-meter"
     }
   ]
 }

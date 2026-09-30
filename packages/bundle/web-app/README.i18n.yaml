@@ -30,11 +30,14 @@
   en: 1fe96dde34f21b23
   zh: 5689c4f4186805c1
 /deepseek-ai-dsh-web-app/use-this-package/per-session-agent-setup:
-  en: ccd6fc264b51e44b
-  zh: 3265c68477a89ec9
+  en: dbbf50ffd8b64bd4
+  zh: 5e13e323113309b0
+/deepseek-ai-dsh-web-app/use-this-package/preset-comparison-and-turbo-setup:
+  en: 89c0a782f8a5ee57
+  zh: 90635809bc545f14
 /deepseek-ai-dsh-web-app/understand-the-implementation:
-  en: 4eb00d95238e3b92
-  zh: 0d6ca9e1a3e7db84
+  en: ca6bfe627bdec0ac
+  zh: 1a7ffd738e344917
 /deepseek-ai-dsh-web-app/understand-the-implementation/patch-semantics:
   en: f0078127aa8dd273
   zh: c954c137599b486f
@@ -45,7 +48,7 @@
   en: b5ed8ff0056ca9da
   zh: fdc1fa4f14cb00b3
 /deepseek-ai-dsh-web-app/understand-the-implementation/source-map:
-  en: 0d08e95f0a5543cb
+  en: 72ce50d2c45955fb
   zh: 5a3e8e4102678cb7
 /deepseek-ai-dsh-web-app/understand-the-implementation/invariant-ownership:
   en: 34767bb4c0471622

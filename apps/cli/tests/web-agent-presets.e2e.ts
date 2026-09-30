@@ -26,13 +26,15 @@ import { bundlePatchPaths, composeEntries } from '@deepseek-ai/dsh-app-boot'
 const SETTINGS_NAMESPACE = 'agent-preset-registry'
 const SUBAGENT_MODEL_SELECTION_SETTINGS_NAMESPACE = 'subagent-model-selection-settings'
 import { applyChildComposition, childSessionMeta } from '@deepseek-ai/dsh-subagent'
-import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
+import { MockAdapter, toolCallResponse, textResponse } from '../../../packages/core/agent-loop/tests/mock-adapter.ts'
 import type {} from '@deepseek-ai/dsh-compaction-basic'
 import type {} from '@deepseek-ai/dsh-skill'
 import type {} from '@deepseek-ai/dsh-tools'
 // Type-only: resolves `ctx.get('sessionProjections')` and `ctx.get('tokenMeter')`.
 import type {} from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-token-meter'
+import type {} from '@deepseek-ai/dsh-tool-session-query/turbo-context'
 
 const REPO_ROOT = fileURLToPath(new URL('../../..', import.meta.url))
 const { boot } = createRequire(import.meta.url)(join(REPO_ROOT, 'packages/boot/app-boot/lib/index.js')) as typeof import('@deepseek-ai/dsh-app-boot')
@@ -90,6 +92,8 @@ async function bootWeb(
     // agent's capabilities, which is all this file asserts.
     { id: 'web-runtime', disabled: true },
     { id: 'session-telemetry-otel', disabled: true },
+    // Keep background title generation from consuming scripted model responses.
+    { id: 'session-title-llm', disabled: true },
     // A deployment-level skill on the host registry's GLOBAL layer — the same
     // registration shape a repository plugin's skill root uses. The layered
     // skills test below proves it reaches preset-composed agents.
@@ -242,13 +246,240 @@ describe('the shipped Web composition', () => {
     }
   })
 
-  it('supplies both shipped presets, and only those, from the system root', async () => {
+  it('supplies the upstream presets and local Turbo preset from the system root', async () => {
     const listed = await ctx.agentPresets.list()
 
-    expect(listed.map(preset => preset.id).sort()).toEqual(['cordis', 'minimal', 'ptc', 'standard'])
+    expect(listed.map(preset => preset.id).sort()).toEqual(['cordis', 'minimal', 'ptc', 'standard', 'turbo'])
     expect(listed.every(preset => !('path' in preset))).toBe(true)
     expect(ctx.agentPresets.defaultId).toBe('standard')
   })
+
+  it('composes Turbo with fixed investigation and an explicit unconfigured scout route', async () => {
+    const handle = await ctx.agents.create({
+      sessionId: SessionId('preset-turbo'),
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'turbo').then(() => undefined),
+    })
+    try {
+      const names = toolNames(ctx, handle.agent)
+      expect(names).toContain('turbo_investigate')
+      expect(names).toContain('edit')
+      expect(names).not.toContain('subagent')
+      expect(names).not.toContain('workflow')
+      const result = await ctx.tools.execute({
+        name: 'turbo_investigate', callId: ToolCallId('turbo-unconfigured'),
+        agent: handle.agent, signal: new AbortController().signal,
+        arguments: { task: 'Find a bug', scopes: ['auth'] },
+      })
+      expect(result.isError).toBe(true)
+      expect(JSON.stringify(result.content)).toContain('No parent-model fallback')
+    } finally {
+      await handle.dispose()
+    }
+  })
+
+  it('runs restricted scouts through the actual Turbo preset composition', async () => {
+    const original = composeEntries([webPatches('test')]).find(row => row.id === 'preset-turbo')!.config as import('@deepseek-ai/dsh-agent-preset-registry').PresetDefinition
+    const disposePreset = await ctx.agentPresets.register({
+      ...original, id: 'turbo-test',
+      plugins: original.plugins.map(plugin => plugin.id === 'turbo-investigate'
+        ? { ...plugin, config: { routes: [{ provider: 'turbo-test', model: 'qwen38' }], maxScoutSteps: 2 } }
+        : plugin),
+    })
+    const report = { findings: [], coverage: 'No source changes.' }
+    const adapter = new MockAdapter([
+      toolCallResponse('denied', 'write', { path: 'turbo-forbidden.txt', content: 'forbidden' }),
+      toolCallResponse('report', 'structured_output', report),
+    ])
+    const disposeAdapter = ctx.llm.registerAdapter(['turbo-test'], adapter)
+    const workspace = await mkdtemp(join(tmpdir(), 'dsh-turbo-scout-'))
+    try {
+      const handle = await ctx.agents.create({
+        sessionId: SessionId(`preset-turbo-real-${randomUUID()}`),
+        meta: { cwd: workspace },
+        setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'turbo-test').then(() => undefined),
+      })
+      try {
+        const result = await ctx.tools.execute({
+          name: 'turbo_investigate', callId: ToolCallId('turbo-real'),
+          agent: handle.agent, signal: new AbortController().signal,
+          arguments: { task: 'Investigate without edits', scopes: ['auth'] },
+        })
+        expect(result.isError, JSON.stringify(result.content)).toBe(false)
+        expect(JSON.stringify(result.content)).toContain('completed')
+        await expect(readFile(join(workspace, 'turbo-forbidden.txt'))).rejects.toMatchObject({ code: 'ENOENT' })
+        expect(adapter.requests).toHaveLength(2)
+        for (const request of adapter.requests) {
+          expect(request.model).toBe('qwen38')
+          expect(request.tools?.map(tool => tool.name).sort()).toEqual(['glob', 'grep', 'read', 'structured_output'])
+        }
+      } finally {
+        await handle.dispose()
+      }
+    } finally {
+      await rm(workspace, { recursive: true, force: true })
+      disposeAdapter()
+      await disposePreset()
+    }
+  })
+
+  it('replaces Turbo context without summarization and retrieves shadowed evidence after resume', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'dsh-turbo-context-'))
+    const marker = 'ARCHIVE_ONLY_EVIDENCE_763'
+    await writeFile(join(workspace, 'evidence.txt'), `${marker}\n${'source detail\n'.repeat(300)}`)
+    await writeFile(join(workspace, 'AGENTS.md'), 'Always preserve KEEP_PROJECT_RULE.\n')
+    const note = 'Goal: investigate evidence.txt. File inspected; no edits made. Next: verify archived evidence through session history.'
+    const adapter = new MockAdapter([
+      toolCallResponse('read-source', 'read', { file_path: 'evidence.txt' }),
+      toolCallResponse('save-note', 'context_note', { note }),
+      toolCallResponse('reset-window', 'new_context', {}),
+      (options) => {
+        const history = JSON.stringify(options.messages)
+        expect(history).toContain(note)
+        expect(history).toContain('KEEP_PROJECT_RULE')
+        expect(history).not.toContain(marker)
+        return toolCallResponse('find-evidence', 'session_event_search', { query: marker, surfaces: ['shadowed'] })
+      },
+      (options) => {
+        const last = JSON.stringify(options.messages.filter(message => message.role === 'tool').at(-1))
+        expect(last).toContain(marker)
+        expect(last).toContain('shadowed')
+        return textResponse('Archived evidence found.')
+      },
+    ])
+    const disposeAdapter = ctx.llm.registerAdapter(['turbo-context-test'], adapter)
+    const id = SessionId(`turbo-context-${randomUUID()}`)
+    const setup = async (agentCtx: Context) => { await ctx.agentPresets.mount(agentCtx, 'turbo') }
+    try {
+      const handle = await ctx.agents.create({
+        sessionId: id, meta: { cwd: workspace },
+        agentOptions: { provider: 'turbo-context-test', model: 'test' }, setup,
+      })
+      try {
+        expect(handle.agent.ctx.get('compaction')).toBeUndefined()
+        handle.agent.followup(createUserMessage({
+          source: { kind: 'user' }, content: [{ type: 'text', text: 'Inspect evidence.txt, save a task note, start a new context, then recover the evidence from history.' }],
+        }))
+        await handle.agent.whenIdle()
+        const log = await ctx.sessionQuery.readSession(id)
+        expect(JSON.stringify(log.events.at(-1))).not.toContain('"kind":"error"')
+        expect(adapter.requests).toHaveLength(5)
+        expect(log.events.some(event => event.type === 'compaction/summary')).toBe(false)
+        expect(log.events.some(event => event.type === 'user/message' && event.data.source.kind === 'turbo-context')).toBe(true)
+        expect(handle.agent.session.surface.replaceGeneration).toBeGreaterThan(0)
+        await ctx.sessions.flush(handle.agent.session)
+      } finally {
+        await handle.dispose()
+      }
+      const stored = await ctx.sessionQuery.readSession(id)
+      expect(JSON.stringify(stored.events)).toContain(note)
+      expect(JSON.stringify(stored.events)).toContain(marker)
+      const result = stored.events.find(event => event.type === 'tool/result'
+        && event.data.message.content.some(block => block.type === 'text' && block.text.includes(marker)))
+      if (result === undefined) throw new Error('Missing original evidence event')
+      const reader = new MockAdapter([
+        toolCallResponse('read-archived', 'session_event_read', { seq: result.seq }),
+        (options) => {
+          expect(JSON.stringify(options.messages)).toContain(note)
+          expect(JSON.stringify(options.messages.filter(message => message.role === 'tool').at(-1))).toContain(marker)
+          return textResponse('Resumed with note and original evidence.')
+        },
+      ])
+      disposeAdapter()
+      const disposeReader = ctx.llm.registerAdapter(['turbo-context-test'], reader)
+      try {
+        const resumed = await ctx.agents.resume({
+          resumeSessionId: id, agentOptions: { provider: 'turbo-context-test', model: 'test' }, setup,
+        })
+        try {
+          resumed.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Read the archived evidence and continue.' }] }))
+          await resumed.agent.whenIdle()
+          expect(reader.requests).toHaveLength(2)
+        } finally { await resumed.dispose() }
+      } finally { disposeReader() }
+    } finally {
+      disposeAdapter()
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it.each([true, false])('automatically replaces pressured Turbo context only with a fresh note (%s)', async (saveNote) => {
+    const workspace = await mkdtemp(join(tmpdir(), 'dsh-turbo-pressure-'))
+    await writeFile(join(workspace, 'evidence.txt'), 'PRESSURE_EVIDENCE\n'.repeat(300))
+    const adapter = new MockAdapter([
+      toolCallResponse('read', 'read', { file_path: 'evidence.txt' }),
+      ...(saveNote ? [toolCallResponse('note', 'context_note', { note: 'Evidence inspected; continue verification.' })] : []),
+      textResponse('Continue with preserved task state.'),
+    ].map(chunks => chunks.filter(chunk => chunk.type !== 'usage')))
+    adapter.resolveModel = (provider, model) => Promise.resolve({ provider, id: model, name: model, context: { contextWindow: 100 } })
+    const disposeAdapter = ctx.llm.registerAdapter(['turbo-pressure'], adapter)
+    const handle = await ctx.agents.create({
+      sessionId: SessionId(`turbo-pressure-${randomUUID()}`), meta: { cwd: workspace },
+      agentOptions: { provider: 'turbo-pressure', model: 'test' },
+      setup: async (agentCtx) => { await ctx.agentPresets.mount(agentCtx, 'turbo') },
+    })
+    try {
+      handle.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Inspect evidence and continue.' }] }))
+      await handle.agent.whenIdle()
+      expect(adapter.requests).toHaveLength(saveNote ? 3 : 2)
+      expect(handle.agent.session.surface.replaceGeneration).toBe(saveNote ? 1 : 0)
+      expect(JSON.stringify(adapter.requests.at(-1)?.messages).includes('PRESSURE_EVIDENCE')).toBe(!saveNote)
+      const log = await ctx.sessionQuery.readSession(handle.agent.id)
+      expect(log.events.filter(event => event.type === 'user/message' && event.data.source.kind === 'turbo-context' && event.data.source.action === 'reminder')).toHaveLength(1)
+    } finally {
+      await handle.dispose()
+      disposeAdapter()
+      await rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it.each(['missing-note', 'oversized-note', 'flush-failure', 'cancelled-flush'] as const)(
+    'preserves Turbo history on %s', async (scenario) => {
+      const workspace = await mkdtemp(join(tmpdir(), 'dsh-turbo-reset-failure-'))
+      await writeFile(join(workspace, 'evidence.txt'), 'Retain this original evidence.\n'.repeat(200))
+      const script = scenario === 'missing-note'
+        ? [toolCallResponse('reset', 'new_context', {}), textResponse('Fresh note required.')]
+        : [
+          toolCallResponse('read', 'read', { file_path: 'evidence.txt' }),
+          toolCallResponse('note', 'context_note', { note: scenario === 'oversized-note' ? '界'.repeat(1366) : 'Task in progress; preserve evidence.' }),
+          toolCallResponse('reset', 'new_context', {}),
+          textResponse('History retained.'),
+        ]
+      const adapter = new MockAdapter(script)
+      const route = `turbo-failure-${scenario}`
+      const disposeAdapter = ctx.llm.registerAdapter([route], adapter)
+      const handle = await ctx.agents.create({
+        sessionId: SessionId(`${route}-${randomUUID()}`), meta: { cwd: workspace },
+        agentOptions: { provider: route, model: 'test' },
+        setup: async (agentCtx) => { await ctx.agentPresets.mount(agentCtx, 'turbo') },
+      })
+      const disposeFlush = ctx.on('session/flush', (session) => {
+        if (session.id !== handle.agent.id) return
+        // Only interrupt the reset barrier after the request has been logged.
+        const state = ctx.sessionProjections.stateOf(session, 'turboContext')
+        if (state === undefined || state.requested < 0) return
+        if (scenario === 'flush-failure') throw new Error('fixture checkpoint failure')
+        if (scenario === 'cancelled-flush') handle.agent.cancel({ kind: 'parent' })
+      })
+      try {
+        handle.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Investigate and preserve the task.' }] }))
+        await handle.agent.whenIdle()
+        const log = await ctx.sessionQuery.readSession(handle.agent.id)
+        expect(handle.agent.session.surface.replaceGeneration).toBe(0)
+        expect(log.events.some(event => event.type === 'compaction/prune')).toBe(false)
+        if (scenario === 'missing-note' || scenario === 'oversized-note') {
+          expect(JSON.stringify(log.events)).toContain('Save a fresh context_note')
+        } else {
+          expect(adapter.requests).toHaveLength(3)
+          expect(JSON.stringify(log.events)).toContain('Task in progress; preserve evidence.')
+        }
+      } finally {
+        disposeFlush()
+        await handle.dispose()
+        disposeAdapter()
+        await rm(workspace, { recursive: true, force: true })
+      }
+    },
+  )
 
   it('composes the full agent from `standard`', async () => {
     const handle = await ctx.agents.create({

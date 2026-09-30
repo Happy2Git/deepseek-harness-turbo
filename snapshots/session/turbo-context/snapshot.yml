@@ -1,0 +1,10 @@
+version: 1
+scenario: turbo-context
+profile: headless
+composition: turbo-context
+recording: authored
+header:
+  class: turbo-context
+  pin: true
+  changes: 1
+permission: read-only

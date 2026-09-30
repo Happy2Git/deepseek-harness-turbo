@@ -27,13 +27,23 @@
       "default": "./lib/invariant.js"
     },
     "./src/*": "./src/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./turbo": {
+      "types": "./lib/types/turbo.d.ts",
+      "default": "./lib/turbo.js"
+    },
+    "./turbo-capacity": {
+      "types": "./lib/types/turbo-capacity.d.ts",
+      "default": "./lib/turbo-capacity.js"
+    }
   },
   "files": [
     "lib/index.js",
     "lib/invariant.js",
     "lib/model-selection-settings.js",
-    "lib/types/**/*.d.ts"
+    "lib/types/**/*.d.ts",
+    "lib/turbo.js",
+    "lib/turbo-capacity.js"
   ],
   "license": "MIT",
   "peerDependencies": {

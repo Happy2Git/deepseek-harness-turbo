@@ -56,6 +56,21 @@ kind: "package-reference"
 
 每个可信查询服务调用都经过一个错误净化器：调用方取消被精确保留，语料库与提供方诊断进入内部日志，不安全或不可打印的失败回退到固定 `SESSION_QUERY_TOOL_FAILED` 代码与消息。本地参数校验与授权错误保留精确的工具自有消息（目标在调用方工作区之外时为 `SESSION_QUERY_TOOL_UNAUTHORIZED`）。本包不执行字节或字符截断，也不导入 spill 后端；需要限制内联输出的部署应挂载 `@deepseek-ai/dsh-spill-policy`，它可以在保留完整结果的同时替换过大的已渲染文本。
 
+<a id="turbo-context-windows"></a>
+### Turbo 上下文窗口
+
+可选入口 `@deepseek-ai/dsh-tool-session-query/turbo-context` 为主 agent 挂载 `context_note` 和 `new_context`。随附 Turbo 预设同时挂载本包及设置为 `openAt: first-search` 的隔离 SQLite 历史提供方；官方预设保持现有行为。不要同时挂载摘要器或工具结果裁剪器。
+
+`context_note` 替换整份任务笔记，由 `maxNoteBytes` 限制大小，默认 4096 UTF-8 字节。笔记保留目标、用户修正与约束、决策、已修改文件、测试证据、未完成事项、下一步及有用的事件序号。成功的工具结果将笔记记录到会话日志中，不另设权威笔记文件。`new_context` 要求笔记晚于最新直接用户输入和上次替换；新用户消息会取消较早的待处理替换请求。
+
+达到可用模型上下文的 `remindRatio`（0.65）时，插件每个窗口提醒一次更新笔记。达到 `resetRatio`（0.8）时，只有紧邻的上一个模型步骤保存过笔记，才允许自动替换。可用上下文为提供方上下文窗口减去配置的输出预留。缺少上下文窗口元数据时，只能通过显式调用 `new_context` 触发替换。提醒阈值必须低于替换阈值。
+
+替换等待工具步骤完整结束且日志持久化成功。系统消息、首次及最新直接用户消息、指令类消息逐字保留，已保存笔记进入新的请求序列。中间的用户修正需要持续维护到笔记中。缺少笔记、笔记超限、工具配对不完整、替换无法缩小上下文、取消及持久化失败都会阻止替换。原始日志保留，文件和运行中的进程不变。若替换后的最终保存失败，当前轮次会在内存替换后停止；原始事件已在替换前保存。
+
+使用带 `surfaces: ['shadowed']` 的 `session_event_search` 查找被替换的证据，再以返回的事件序号调用 `session_event_read` 读取原文。`session_search` 搜索其他会话，不能独自恢复当前会话的证据。笔记和搜索结果属于背景证据，不构成新的用户指令或授权。恢复会话时，从持久化日志重建笔记及当前窗口。
+
+两个新增工具 schema 和固定笔记维护指引会增加请求 token。更新笔记只返回简短确认；替换注入有大小限制的笔记和保留指令，不调用摘要模型。替换会重建请求后缀，可能降低缓存复用；最终延迟及 token 收益取决于笔记质量和检索频率。[Turbo 上下文录制会话](../../../snapshots/session/turbo-context/session.v4.jsonl) 固定模型可见提示词、schema、笔记确认、替换消息及历史查询行为。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -185,4 +200,4 @@ Use session_search to find relevant work from prior sessions, or session_event_s
 
 </details>
 
-**运行时不变式：** 不发布伴生入口。这个只读模型适配器不拥有任何超出注册表范围的事件关系或可变数据关系；这些注册表已经负责校验注册。
+**运行时不变式：** 不发布伴生入口。查询适配器不维护独立的可变副本；可选 Turbo 笔记投影完全派生自会话日志，现有上下文与持久化服务校验各自拥有的关系。
