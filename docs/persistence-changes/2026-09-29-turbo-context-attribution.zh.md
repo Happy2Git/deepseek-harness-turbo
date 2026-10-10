@@ -27,20 +27,20 @@ id: 2026-09-29-turbo-context-attribution
 baseline: false
 changes:
   - root: "event:agent/inbox/spliced"
-    previous: "2026-09-16-session-format-v4"
-    after: "2129fe973af511d1e387c607c3e79aacfecc78fdaebb42f6c599fb379e7e3b69"
+    previous: "2026-10-05-working-directory-attribution"
+    after: "1f62c08dbd21d3d2f95e4c06530ffbb45c75f2f0046e5cf70b88ab1a96184154"
     decision: same-version
   - root: "event:developer/message"
-    previous: "2026-09-16-session-format-v4"
-    after: "2e8d1b37dc7a94ef7c006ca3756538890381d4683c4935aec50e75937f96fc78"
+    previous: "2026-10-05-working-directory-attribution"
+    after: "fc36c87cc87f8996d607649d94e1f5bef5a30cd66b1c59f3094addfe38d72daa"
     decision: same-version
   - root: "event:session/title-llm-request"
-    previous: "2026-09-16-session-format-v4"
-    after: "1c3a798e0c8b188a0f199aa7dd5e7ceac23726e4637e572a5455a0f1461ae5ea"
+    previous: "2026-10-07-title-reasoning-effort"
+    after: "6b26345bf8b0353246263e2fc38cdf069676736a7cbf2435a55247e50a3aabea"
     decision: same-version
   - root: "event:user/message"
-    previous: "2026-09-16-session-format-v4"
-    after: "0b6369bcea29fe8bbb526aa5ea17be8f88ab6001b127a83fbe6c1addecc1f98d"
+    previous: "2026-10-05-working-directory-attribution"
+    after: "214d26bd12a3c9102f1f9063f8696d5208dfbbb3f81c09da096cfe80f18f8756"
     decision: same-version
 ```
 

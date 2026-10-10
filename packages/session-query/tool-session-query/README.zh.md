@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-使用 `dsh-tool-session-query` 可让模型搜索既往会话、检查事件匹配、追踪会话或事件关系，并读取精确事件数据。它的五个只读工具返回无游标文本；只有目标会话的 `cwd` 与调用方完全匹配时才允许跨会话访问，没有 `cwd` 的调用方只能检查自己。搜索会排除调用方会话，并在达到部署结果上限时要求模型缩小查询。本包是 opt-in；启用后，每次模型请求都会增加固定指引与五个工具 schema。
+使用 `dsh-tool-session-query` 工具可让模型搜索既往会话、检查事件匹配、追踪会话或事件关系，并读取精确事件数据。它的五个只读工具返回无游标文本；只有目标会话的 `cwd` 与调用方完全匹配时才允许跨会话访问，没有 `cwd` 的调用方只能检查自己。搜索会排除调用方会话，并在达到部署结果上限时要求模型缩小查询。Turbo 默认挂载本包，其他预设按需启用；启用后，每次模型请求都会增加固定指引与已启用工具的 schema。`includeTrace: false` 不注册 `session_trace` 和 `session_event_trace`，仅保留三个搜索与读取工具；Turbo 使用这个精简目录。
 
 ## 目录
 
@@ -117,8 +117,8 @@ kind: "package-reference"
 当包级约定不够用时阅读以下页面。它们从工具表面逐步进入底层服务、schema 目录与设计证据。
 
 - [生成的工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-session-query)——模型看到的五个工具 schema。
-- [dsh-session-query](../session-query/README.zh.md)——这些工具调用的服务。
-- [dsh-session-query-sqlite](../session-query-sqlite/README.zh.md)——两个搜索工具背后的全文后端。
+- [dsh-session-query](../../session-query/session-query/README.zh.md)——这些工具调用的服务。
+- [dsh-session-query-sqlite](../../session-query/session-query-sqlite/README.zh.md)——两个搜索工具背后的全文后端。
 - [会话查询子系统参考](../../../docs/subsystems/session-query.zh.md)——工具之下的类型级约定。
 - [面向模型的会话查询工具](../../../.agents/notes/archived/feature/2026-07-24-model-facing-session-query-tools.md)——工作区授权、无游标结果与 spill 决策。
 

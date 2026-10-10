@@ -42,6 +42,8 @@
       name: '@deepseek-ai/dsh-tool-session-query/turbo-context'
     - id: turbo-history-tools
       name: '@deepseek-ai/dsh-tool-session-query'
+      config:
+        includeTrace: false
 
 - insert:
     - id: turbo-snapshot-clock

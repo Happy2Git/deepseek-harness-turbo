@@ -269,6 +269,15 @@ describe('registration and schemas', () => {
     expect(ctx.sessionProjections.stateOf(caller, 'turboContext')).toBeUndefined()
   })
 
+  it('omits relationship schemas and guidance in retrieval-only mode', async () => {
+    const { ctx, fiber } = await mount({ includeTrace: false })
+    expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['session_search', 'session_event_search', 'session_event_read'])
+    const prompt = await ctx.systemPrompt.assemble()
+    expect(JSON.stringify(prompt.sections)).not.toContain('session_event_trace')
+    await fiber.dispose()
+    expect(ctx.tools.schemas()).toEqual([])
+  })
+
   it('registers the five cursor-free tools, prompt, timeouts, and pure generic presenters, then disposes them', async () => {
     const mounted = await mount({ maxSearchResults: 7, searchTimeoutMs: 1234 })
     const names = mounted.ctx.tools.schemas().map(schema => schema.name)
@@ -358,7 +367,7 @@ describe('registration and schemas', () => {
 
   it('expresses the complete Node timer range in the Loader config schema', () => {
     expect(new ToolSessionQuery.Config({ searchTimeoutMs: MAX_TIMER_DELAY_MS }))
-      .toEqual({ maxSearchResults: 100, searchTimeoutMs: MAX_TIMER_DELAY_MS })
+      .toEqual({ includeTrace: true, maxSearchResults: 100, searchTimeoutMs: MAX_TIMER_DELAY_MS })
     expect(() => new ToolSessionQuery.Config({ searchTimeoutMs: 1.5 })).toThrow()
     expect(() => new ToolSessionQuery.Config({ searchTimeoutMs: MAX_TIMER_DELAY_MS + 1 })).toThrow()
   })

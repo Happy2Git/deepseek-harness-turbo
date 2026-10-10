@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use `dsh-tool-session-query` to let a model search earlier sessions, inspect event matches, trace session or event relationships, and read exact event data. Its five read-only tools return cursor-free text and authorize cross-session access only when the target session's `cwd` exactly matches the caller's; callers without a `cwd` can inspect only themselves. Search excludes the caller session and asks the model to narrow its query when the deployment result cap is reached. The package is opt-in, and enabling it adds fixed guidance plus five tool schemas to every model request.
+Use the `dsh-tool-session-query` tools to let a model search earlier sessions, inspect event matches, trace session or event relationships, and read exact event data. Its five read-only tools return cursor-free text and authorize cross-session access only when the target session's `cwd` exactly matches the caller's; callers without a `cwd` can inspect only themselves. Search excludes the caller session and asks the model to narrow its query when the deployment result cap is reached. Turbo mounts the package; other presets opt in, and enabling it adds fixed guidance plus the enabled tool schemas to every model request. `includeTrace: false` omits `session_trace` and `session_event_trace`, leaving the three search/read tools; Turbo uses this smaller catalog.
 
 ## Table of Contents
 
@@ -117,8 +117,8 @@ Each executor derives the caller, normalizes the model's arguments into service 
 Read these pages when the package-level contract is not enough. They move from the tool surface to the underlying service, the schema catalog, and the design evidence.
 
 - [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-session-query) — the five tool schemas as the model sees them.
-- [dsh-session-query](../session-query/README.md) — the service these tools call.
-- [dsh-session-query-sqlite](../session-query-sqlite/README.md) — the full-text backend behind the two search tools.
+- [dsh-session-query](../../session-query/session-query/README.md) — the service these tools call.
+- [dsh-session-query-sqlite](../../session-query/session-query-sqlite/README.md) — the full-text backend behind the two search tools.
 - [Session Query subsystem reference](../../../docs/subsystems/session-query.md) — the type-level contract under the tools.
 - [Model-facing session query tools](../../../.agents/notes/archived/feature/2026-07-24-model-facing-session-query-tools.md) — workspace authority, cursor-free results, and spill decisions.
 

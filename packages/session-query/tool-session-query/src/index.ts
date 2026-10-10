@@ -30,10 +30,13 @@ export interface Config {
   maxSearchResults?: number
   /** Cooperative full-text search deadline in milliseconds. Defaults to 30000. */
   searchTimeoutMs?: number
+  /** Include relationship tracing tools; disable for a smaller retrieval-only catalog. */
+  includeTrace?: boolean
 }
 
 /** Schemastery config for Loader defaults and generated configuration docs. */
 export const Config: z<Config> = z.object({
+  includeTrace: z.boolean().default(true),
   maxSearchResults: z.number().step(1).min(1).default(DEFAULT_MAX_SEARCH_RESULTS),
   searchTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_SEARCH_TIMEOUT_MS),
 })
@@ -53,13 +56,15 @@ const PROMPT_TEXT =
   + 'events in one session. Search results are cursor-free and workspace-scoped. Follow a useful hit with '
   + 'session_trace, session_event_trace, or session_event_read when you need lineage, relationships, or exact data.'
 
-/** Register all five tools and their shared model guidance. */
+/** Register search/read tools, optional relationship tracing, and shared model guidance. */
 export function apply(ctx: Context, config: Config): void {
   const resolved = resolveConfig(config)
   ctx.systemPrompt.section({
     name: 'tool:session-query',
     order: ctx.systemPrompt.getSectionOrder('TOOL_SESSION_QUERY'),
-    text: PROMPT_TEXT,
+    text: config.includeTrace === false
+      ? 'Use session_search for prior sessions or session_event_search for earlier events, then session_event_read for exact evidence. Results are workspace-scoped.'
+      : PROMPT_TEXT,
   })
 
   ctx.tools.register(defineTool({
@@ -82,28 +87,31 @@ export function apply(ctx: Context, config: Config): void {
     presentCall: presentation.presentEventSearchCall,
   }))
 
-  ctx.tools.register(defineTool({
-    name: 'session_trace',
-    description: 'Read the authorized session lineage around one session, including complete visible ancestor and descendant relationships.',
-    parameters: toolInput.targetSessionParameter,
-    output: TEXT_OUTPUT,
-    isConcurrencySafe: () => true,
-    execute: (args, exec) => operations.executeSessionTrace(ctx, args, exec),
-    presentCall: presentation.presentSessionTraceCall,
-  }))
+  if (config.includeTrace !== false) {
+    ctx.tools.register(defineTool({
+      name: 'session_trace',
+      description: 'Read the authorized session lineage around one session, including complete visible ancestor and descendant relationships.',
+      parameters: toolInput.targetSessionParameter,
+      output: TEXT_OUTPUT,
+      isConcurrencySafe: () => true,
+      execute: (args, exec) => operations.executeSessionTrace(ctx, args, exec),
+      presentCall: presentation.presentSessionTraceCall,
+    }))
 
-  ctx.tools.register(defineTool({
-    name: 'session_event_trace',
-    description: 'Read every direct replacement and relationship to a cited source event for one event in an authorized session.',
-    parameters: {
-      ...toolInput.targetSessionParameter,
-      seq: { type: 'integer', required: true, description: 'Target event sequence number.' },
-    },
-    output: TEXT_OUTPUT,
-    isConcurrencySafe: () => true,
-    execute: (args, exec) => operations.executeEventTrace(ctx, args, exec),
-    presentCall: args => presentation.presentEventTargetCall('Trace event', args),
-  }))
+    ctx.tools.register(defineTool({
+      name: 'session_event_trace',
+      description: 'Read every direct replacement and relationship to a cited source event for one event in an authorized session.',
+      parameters: {
+        ...toolInput.targetSessionParameter,
+        seq: { type: 'integer', required: true, description: 'Target event sequence number.' },
+      },
+      output: TEXT_OUTPUT,
+      isConcurrencySafe: () => true,
+      execute: (args, exec) => operations.executeEventTrace(ctx, args, exec),
+      presentCall: args => presentation.presentEventTargetCall('Trace event', args),
+    }))
+
+  }
 
   ctx.tools.register(defineTool({
     name: 'session_event_read',

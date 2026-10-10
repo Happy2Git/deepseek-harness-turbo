@@ -30,7 +30,7 @@
       "path": "../../core/system-prompt"
     },
     {
-      "path": "../session-query"
+      "path": "../../session-query/session-query"
     },
     {
       "path": "../../util/timeout"

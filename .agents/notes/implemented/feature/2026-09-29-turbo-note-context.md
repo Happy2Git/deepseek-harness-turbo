@@ -14,6 +14,8 @@ The optional [context entry](../../../../packages/session-query/tool-session-que
 
 The message source identifies reset and reminder content; older readers preserve those messages and their replacement envelopes without understanding the optional projection. It is an attribution-only source addition within the released Session format, acknowledged in the persistence record.
 
+Turbo makes the model-facing query consumer a product package under `session-query/`, because the fifth shipped preset must load without experimental dependencies. The preset exposes only search and exact-read tools (`includeTrace: false`), avoiding two relationship schemas in every request. The investigation guidance asks for the first useful answer or direct tool call without mandatory scouts or note writes. Managed scouts use caller delivery, await disposal on cancellation, and never notify the parent separately from the bounded tool result.
+
 ## Alternatives considered
 
 **An additional summarization call.** It restores a potentially richer summary but adds the model request that the user wants to remove. Maintained notes move that work into ordinary task progress.

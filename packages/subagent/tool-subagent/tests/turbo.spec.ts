@@ -13,6 +13,7 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import ProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import Tools from '@deepseek-ai/dsh-tools'
+import { mountWorkingDirectoryFixture } from '../../subagent/tests/working-directory-fixture.ts'
 import Subagents from '@deepseek-ai/dsh-subagent'
 import * as spawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import { MockAdapter, toolCallResponse, maxTokensResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
@@ -32,6 +33,7 @@ async function setup(script: Script, config: Partial<turbo.Config> = {}) {
   const root = await mkdtemp(join(tmpdir(), 'turbo-loader-'))
   const ctx = new Context()
   owned.push({ ctx, root })
+  await mountWorkingDirectoryFixture(ctx)
   await ctx.plugin(Loader)
   ctx.loader.builtins.include = Include
   const plugins = {
@@ -59,7 +61,8 @@ async function setup(script: Script, config: Partial<turbo.Config> = {}) {
       execute: async () => { if (name === 'write') writes++; return {} },
     })
   }
-  const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'main-model' })
+  const parentHandle = await ctx.agents.create({ sessionId: SessionId('parent'), agentOptions: { provider: 'mock', model: 'main-model' } })
+  const parent = parentHandle.agent
   const call = (scopes = ['auth', 'tests'], signal = new AbortController().signal) => ctx.tools.execute({
     name: 'turbo_investigate', arguments: { task: 'Fix the intermittent login failure. Preserve valid sessions.', scopes },
     callId: ToolCallId('investigate'), agent: parent, signal,

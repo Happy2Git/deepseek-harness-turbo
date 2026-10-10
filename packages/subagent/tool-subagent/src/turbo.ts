@@ -3,8 +3,9 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { z as zod } from 'zod'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import type { SessionId } from '@deepseek-ai/dsh-session'
 import { ReasoningEffortId } from '@deepseek-ai/dsh-llm'
-import type { SubagentRun } from '@deepseek-ai/dsh-subagent'
+import type { SubagentActivation } from '@deepseek-ai/dsh-subagent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
 
@@ -87,11 +88,11 @@ export function apply(ctx: Context, config: Config): void {
     return parsed.data
   }
   const activeParents = new Set<Agent>()
-  const budgets = new WeakMap<Agent, { steps: number; exhausted: boolean }>()
+  const budgets = new Map<SessionId, { steps: number; exhausted: boolean }>()
   ctx.on('agent/created', ({ agent }) => {
     if (![...activeParents].some(parent => parent.id === agent.session.header.parentSession)) return
     const budget = { steps: 0, exhausted: false }
-    budgets.set(agent, budget)
+    budgets.set(agent.id, budget)
     agent.ctx.tools.guard((exec) => {
       if (![...READ_TOOLS, 'structured_output'].includes(exec.name)) return 'Turbo scouts can only read, search, and submit their report.'
       if (exec.name === 'structured_output' && validReport(exec.arguments) === undefined) {
@@ -110,7 +111,7 @@ export function apply(ctx: Context, config: Config): void {
   })
   ctx.systemPrompt.section({
     name: 'tool:turbo_investigate', order: 500,
-    text: 'Use direct tools for small tasks. For independent investigation areas, call turbo_investigate with the full task, symptoms, expected behavior, and distinct scopes. Scouts only investigate; you are the only writer. Check coverage and failures, verify key evidence, then make and test the change. Do not repeat reports or write unnecessary plans. A passing generic test suite alone does not establish task completion. Make at most one additional repair attempt before reporting unresolved failures.',
+    text: 'Start with the useful answer or first necessary direct tool call. Keep progress and final replies concise; omit repeated plans and evidence. Use direct tools for small tasks. Save notes after progress or context pressure, not before answering. For independent scopes, turbo_investigate needs the complete task and context. You alone edit; verify scout coverage, failures, and key evidence before making and testing changes. Do not repeat reports. A generic passing suite does not establish task completion. Make at most one additional repair attempt before reporting unresolved failures.',
   })
   ctx.tools.register(defineTool({
     name: 'turbo_investigate',
@@ -162,27 +163,34 @@ export function apply(ctx: Context, config: Config): void {
       try {
         const workers = await Promise.allSettled(Array.from({ length: Math.min(config.concurrency, input.scopes.length) }, async () => {
           for (const [index, scope] of pending) {
-            let run: SubagentRun | undefined
+            let run: SubagentActivation | undefined
+            let cancel: (() => void) | undefined
             let result: Result = { scope, status: 'failed' }
             try {
               if (signal.aborted) { results[index] = { scope, status: stopped() }; continue }
               const route = config.routes[index % config.routes.length]
               if (route === undefined) throw new Error('No configured scout route.')
-              run = await ctx.subagents.start('spawn', {
-                parent, signal,
-                prompt: [{ type: 'text', text: `Task:\n${input.task}\n\nAssigned scope:\n${scope}` }],
-                toolFilter: { allow: READ_TOOLS },
-                persona: `Investigate the assigned scope using read/search tools directly. Do not narrate plans or progress, edit, delegate, or write a patch. Return at most ${config.maxFindings} concrete findings with source locations, evidence, and checks. Empty findings are valid; state coverage gaps. Aim for at most ${config.reportTargetTokens} tokens in the final report. Submit it through structured_output; do not repeat it as prose.`,
-                outputSchema: REPORT_SCHEMA,
-                agentOptions: {
-                  ...route,
-                  ...config.maxTokens === undefined ? {} : { maxTokens: config.maxTokens },
-                  ...config.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(config.reasoningEffort) },
+              run = await ctx.subagents.startActivation({
+                provider: 'spawn', label: scope, signal, delivery: 'caller',
+                request: { parent,
+                  prompt: [{ type: 'text', text: `Task:\n${input.task}\n\nAssigned scope:\n${scope}` }],
+                  toolFilter: { allow: READ_TOOLS },
+                  persona: `Investigate the assigned scope using read/search tools directly. Do not narrate plans or progress, edit, delegate, or write a patch. Return at most ${config.maxFindings} concrete findings with source locations, evidence, and checks. Empty findings are valid; state coverage gaps. Aim for at most ${config.reportTargetTokens} tokens in the final report. Submit it through structured_output; do not repeat it as prose.`,
+                  outputSchema: REPORT_SCHEMA,
+                  agentOptions: {
+                    ...route,
+                    ...config.maxTokens === undefined ? {} : { maxTokens: config.maxTokens },
+                    ...config.reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(config.reasoningEffort) },
+                  },
                 },
               })
+              const activation = run
+              cancel = () => { void activation.dispose().catch(() => controller.abort()) }
+              signal.addEventListener('abort', cancel, { once: true })
+              if (signal.aborted) cancel()
               const settled = await run.result
               const report = validReport(settled.structured)
-              const exhausted = run.localAgent !== undefined && budgets.get(run.localAgent)?.exhausted
+              const exhausted = budgets.get(run.childId)?.exhausted
               result = isAborted() ? { scope, status: stopped() }
                 : exhausted ? { scope, status: 'budget_exhausted' }
                   : settled.stopReason !== 'completed' ? { scope, status: 'failed' }
@@ -192,7 +200,9 @@ export function apply(ctx: Context, config: Config): void {
               // Provider diagnostics stay in child/provider logs, not in model-visible reports.
               result = { scope, status: signal.aborted ? stopped() : 'failed' }
             } finally {
+              if (cancel !== undefined) signal.removeEventListener('abort', cancel)
               if (run !== undefined) {
+                budgets.delete(run.childId)
                 try { await run.dispose() } catch (error) {
                   controller.abort()
                   throw error
